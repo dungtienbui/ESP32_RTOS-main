@@ -18,7 +18,10 @@ DHT20 DHT;
 
 void setup() {
   rgb.begin();
-
+  //Initialize the LCD
+  lcd.init();
+  // Turn on the blacklight
+  lcd.backlight();
 
   // Initialize serial communication at 115200 bits per second:
   Serial.begin(115200); 
@@ -62,21 +65,15 @@ void TaskBlink(void *pvParameters) {  // This is a task.
 void TaskTemperatureHumidity(void *pvParameters) {  // This is a task.
   //uint32_t blink_delay = *((uint32_t *)pvParameters);
 
-  //Initialize the LCD
-  lcd.init();
-  // Turn on the blacklight
-  lcd.backlight();
-
   int i = 0;
 
-  while(1) {
-    i = i + 1;                          
-    Serial.println(i);
+  while(1) {                      
+    lcd.setCursor(12, 0);
+    lcd.print(i);
     if (i%5 == 0){
-      Serial.print("Measure Temperature and Humidity");
+      Serial.print("Measure Temperature and Humidity time: ");
+      Serial.println(i);
       DHT.read();
-      lcd.setCursor(12, 0);
-      lcd.print(i);
       lcd.setCursor(0, 0);
       lcd.print("Temp: ");
       lcd.print((DHT.getTemperature()));
@@ -84,10 +81,11 @@ void TaskTemperatureHumidity(void *pvParameters) {  // This is a task.
       lcd.print("Humi: ");
       lcd.print((DHT.getHumidity()));
       delay(1000);
+
     }
-    lcd.setCursor(12, 0);
-    lcd.print(i);
     delay(1000);
+
+    i = (i + 1);
   }
 }
 
