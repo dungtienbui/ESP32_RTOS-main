@@ -1,6 +1,10 @@
+#include <stdio.h> 
+#include <stdlib.h> 
+
 #include "Adafruit_NeoPixel.h";
 #include "LiquidCrystal_I2C.h";
 #include "DHT20.h";
+
 
 
 
@@ -90,16 +94,16 @@ void TaskTemperatureHumidity(void *pvParameters) {  // This is a task.
 }
 
 void TaskLebRGB(void *pvParameters) {
-  int i = 0;
+  int randValue = (rand() % 4);
   while(1){
-    rgb.setPixelColor(i, rgb.Color(1,1,1));
+    rgb.setPixelColor(randValue, rgb.Color((rand()%255),(rand()%255),(rand()%255)));
     rgb.show();
     delay(1000);
 
-    rgb.setPixelColor(i, rgb.Color(0,0,0));
+    rgb.setPixelColor(randValue, rgb.Color(0,0,0));
     rgb.show();
     delay(1000);
 
-    i = (i + 1)%4;
+    randValue = (rand() % 4);
   }
 }
