@@ -184,7 +184,7 @@ void messageHandler(String &topic, String &payload)
 
   switch (topic)
   {
-  case l:
+  case "dung/MQTT/LightSensor":
   {
     int lightIntensity = doc["lightIntensity"];
     // lebSwitching(void *(&lightIntensity));
