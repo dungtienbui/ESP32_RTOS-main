@@ -2,26 +2,47 @@
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
 
+#include <stdio.h>
+
 #include "LiquidCrystal_I2C.h"
 #include "DHT20.h"
 
-const char WIFI_SSID[] = "ACLAB";     // CHANGE TO YOUR WIFI SSID
-const char WIFI_PASSWORD[] = "ACLAB2023";  // CHANGE TO YOUR WIFI PASSWORD
+const char WIFI_SSID[] = "ACLAB";         // CHANGE TO YOUR WIFI SSID
+const char WIFI_PASSWORD[] = "ACLAB2023"; // CHANGE TO YOUR WIFI PASSWORD
 
-const char MQTT_BROKER_ADDRESS[] = "broker.hivemq.com";  // CHANGE TO MQTT BROKER'S ADDRESS
+const char MQTT_BROKER_ADDRESS[] = "broker.hivemq.com"; // CHANGE TO MQTT BROKER'S ADDRESS
 const int MQTT_PORT = 1883;
-const char MQTT_CLIENT_ID[] = "dung-esp32-mqtt";  
+const char MQTT_CLIENT_ID[] = "dung-esp32-mqtt";
 
-const char MQTT_USERNAME[] = "";                        
-const char MQTT_PASSWORD[] = "";                        
+const char MQTT_USERNAME[] = "";
+const char MQTT_PASSWORD[] = "";
 
+const unsigned short NUM_PUBLISH = 2;
+const char *const MQTT_PUBLISH[NUM_PUBLISH] = {
+    "dung/MQTT/TemperatureHumiditySensor",
+    "dung/MQTT/LightSensor"};
+
+const unsigned short NUM_SUBCRIBE = 2;
+const char *const MQTT_SUBCRIBE[NUM_SUBCRIBE] = {
+    "dung/MQTT/TemperatureHumiditySensor",
+    "dung/MQTT/LightSensor"};
+
+// define struct data type
+struct ScreenData
+{
+  char *line0;
+  char *line1;
+};
 
 // Define your tasks here
 
+// read sensor
 void TemperatureHumiditySensor(void *pvParameters);
-
 void TaskLightSensor(void *pvParameters);
 
+// control device
+void lebSwitching(void *pvParameters);
+void screenShowing(void *pvParameters);
 
 // Define your components here
 DHT20 DHT;
@@ -30,7 +51,8 @@ LiquidCrystal_I2C lcd(0x21, 16, 2);
 WiFiClient network;
 MQTTClient mqtt = MQTTClient(256);
 
-void setup() {
+void setup()
+{
 
   Serial.begin(115200);
   Serial.println("Setup started");
@@ -46,7 +68,8 @@ void setup() {
 
   Serial.println("ESP32 - Connecting to Wi-Fi");
 
-  while (WiFi.status() != WL_CONNECTED) {
+  while (WiFi.status() != WL_CONNECTED)
+  {
     delay(500);
     Serial.print(".");
   }
@@ -54,28 +77,30 @@ void setup() {
 
   connectToMQTT();
 
-  xTaskCreate(TemperatureHumiditySensor, "Task Temperature" ,4096, NULL, 1, NULL); // Increased stack size
-  xTaskCreate(TaskLightSensor, "Task Light and LED" ,4096, NULL, 2, NULL); // Increased stack size
+  xTaskCreate(TemperatureHumiditySensor, "Task read DH20 sensor (temperature and huminity).", 4096, NULL, 1, NULL); // Increased stack size
+  xTaskCreate(TaskLightSensor, "Task read light sensor.", 4096, NULL, 1, NULL);                                     // Increased stack size
 
   Serial.println("Setup completed");
 }
 
-void loop() {
+void loop()
+{
 }
 
-
-void TemperatureHumiditySensor(void *pvParameters) {
-  while(1) {
+void TemperatureHumiditySensor(void *pvParameters)
+{
+  while (1)
+  {
     mqtt.loop();
 
-    Serial.println("Task Temperature and Humidity");
+    Serial.println("Task read Temperature&Humidity-sensor.");
 
     DHT.read();
 
     StaticJsonDocument<200> message;
     message["timestamp"] = millis();
-    message["Temp"] = DHT.getTemperature();
-    message["Humi"] = DHT.getHumidity();
+    message["Temperature"] = DHT.getTemperature();
+    message["humidity"] = DHT.getHumidity();
 
     char messageBuffer[512];
     serializeJson(message, messageBuffer);
@@ -86,91 +111,124 @@ void TemperatureHumiditySensor(void *pvParameters) {
   }
 }
 
-
-void TaskLightSensor(void *pvParameters) {
-  while(1) {
+void TaskLightSensor(void *pvParameters)
+{
+  while (1)
+  {
     mqtt.loop();
 
-    Serial.println("Task Light and LED");
+    Serial.println("Task read light-sensor.");
 
     Serial.println(analogRead(A0));
 
     StaticJsonDocument<200> message;
     message["timestamp"] = millis();
-    message["data"] = analogRead(A0);
+    message["lightIntensity"] = analogRead(A0);
     char messageBuffer[512];
     serializeJson(message, messageBuffer);
 
     mqtt.publish("dung/MQTT/LightSensor", messageBuffer);
 
-
     delay(3000);
   }
 }
 
-
-void connectToMQTT() {
+void connectToMQTT()
+{
   mqtt.begin(MQTT_BROKER_ADDRESS, MQTT_PORT, network);
 
   mqtt.onMessage(messageHandler);
 
   Serial.print("ESP32 - Connecting to MQTT broker");
 
-  while (!mqtt.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD)) {
+  while (!mqtt.connect(MQTT_CLIENT_ID, MQTT_USERNAME, MQTT_PASSWORD))
+  {
     Serial.print(".");
     delay(100);
   }
   Serial.println("\nConnected to MQTT broker");
 
-  if (!mqtt.connected()) {
+  if (!mqtt.connected())
+  {
     Serial.println("ESP32 - MQTT broker Timeout!");
     return;
   }
-
-  if (mqtt.subscribe("dung/MQTT/TemperatureHumiditySensor"))
-    Serial.print("ESP32 - Subscribed to the topic: ");
-  else
-    Serial.print("ESP32 - Failed to subscribe to the topic: ");
-
-  Serial.println("dung/MQTT/TemperatureHumiditySensor");
-
-  if (mqtt.subscribe("dung/MQTT/LightSensor"))
-    Serial.print("ESP32 - Subscribed to the topic: ");
-  else
-    Serial.print("ESP32 - Failed to subscribe to the topic: ");
-
-  Serial.println("dung/MQTT/LightSensor");
+  for (int i = 0; i < NUM_SUBSCRIBE; i++)
+  {
+    if (mqtt.subscribe(MQTT_SUBSCRIBE[i]))
+    {
+      Serial.print("ESP32 - Subscribed to the topic: ");
+      Serial.println(MQTT_SUBSCRIBE[i]);
+    }
+    else
+    {
+      Serial.print("ESP32 - Failed to subscribe to the topic: ");
+      Serial.println(MQTT_SUBSCRIBE[i]);
+    }
+  }
 }
 
+void messageHandler(String &topic, String &payload)
+{
 
-void messageHandler(String &topic, String &payload) {
-  
   // Parse the payload
   StaticJsonDocument<200> doc;
   DeserializationError error = deserializeJson(doc, payload);
 
-  if (error) {
+  if (error)
+  {
     Serial.print("deserializeJson() failed: ");
     Serial.println(error.c_str());
     return;
   }
 
-
-  if (topic == "dung/MQTT/LightSensor"){
-    int data = doc["data"];
-
-    if(data > 500){
-      digitalWrite(D13, HIGH);
-    }
-    if(data < 250){
-      digitalWrite(D13, LOW);
-    }
-  }else if (topic == "dung/MQTT/TemperatureHumiditySensor") {
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print(int(doc["Temp"]));
-    lcd.setCursor(0, 1);
-    lcd.print(int(doc["Humi"]));
+  switch (topic)
+  {
+  case l:
+  {
+    int lightIntensity = doc["lightIntensity"];
+    // lebSwitching(void *(&lightIntensity));
+    xTaskCreate(lebSwitching, "turn leb.", 4096, (void *(&lightIntensity), 2, NULL);
+    
+    break;
   }
-  
+  case "dung/MQTT/TemperatureHumiditySensor":
+  {
+    ScreenData screenData;
+    char line0[17] = snprintf(str, 17, "%d", int(doc["Temperature"]));
+    char line1[17] = snprintf(str, 17, "%d", int(doc["humidity"]));
+    screenData.line0 = &line0;
+    screenData.line1 = &line1;
+    // screenShowing(void *(&screenData));
+    xTaskCreate(screenShowing, "showing data in screen.", 4096, (void *(&screenData), 2, NULL);
+    break;
+  }
+  default:
+  {
+    Serial.print("Do not handle for topic: ");
+    Serial.print(topic);
+  }
+  }
+}
+
+void lebSwitching(void *pvParameters)
+{
+  if (*((int *)pvParameters) > 500)
+  {
+    digitalWrite(D13, HIGH);
+  }
+  else if (data < 250)
+  {
+    digitalWrite(D13, LOW);
+  }
+}
+
+void screenShowing(void *pvParameters)
+{
+  ScreenData* data = (ScreenData*)pvParameters;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(*((*data)[0]));
+  lcd.setCursor(0, 1);
+  lcd.print(*((*data)[1]));
 }

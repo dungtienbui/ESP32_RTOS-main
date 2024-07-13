@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "*.BIN": "code-text-binary",
+        "array": "cpp",
+        "string": "cpp",
+        "string_view": "cpp",
+        "vector": "cpp",
+        "regex": "cpp",
+        "sstream": "cpp"
+    }
+}
