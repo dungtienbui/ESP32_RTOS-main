@@ -195,8 +195,10 @@ void messageHandler(String &topic, String &payload)
   case "dung/MQTT/TemperatureHumiditySensor":
   {
     ScreenData screenData;
-    char line0[17] = snprintf(str, 17, "%d", int(doc["Temperature"]));
-    char line1[17] = snprintf(str, 17, "%d", int(doc["humidity"]));
+    char line0[17];
+    snprintf(str, 17, "%d", int(doc["Temperature"]));
+    char line1[17];
+    snprintf(str, 17, "%d", int(doc["humidity"]));
     screenData.line0 = &line0;
     screenData.line1 = &line1;
     // screenShowing(void *(&screenData));
