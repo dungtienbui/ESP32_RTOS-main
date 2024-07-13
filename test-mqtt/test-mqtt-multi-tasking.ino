@@ -1,9 +1,6 @@
 #include <WiFi.h>
 #include <MQTTClient.h>
 #include <ArduinoJson.h>
-
-#include <stdio.h>
-
 #include "LiquidCrystal_I2C.h"
 #include "DHT20.h"
 
@@ -22,8 +19,8 @@ const char *const MQTT_PUBLISH[NUM_PUBLISH] = {
     "dung/MQTT/TemperatureHumiditySensor",
     "dung/MQTT/LightSensor"};
 
-const unsigned short NUM_SUBCRIBE = 2;
-const char *const MQTT_SUBCRIBE[NUM_SUBCRIBE] = {
+const unsigned short NUM_SUBSCRIBE = 2;
+const char *const MQTT_SUBSCRIBE[NUM_SUBSCRIBE] = {
     "dung/MQTT/TemperatureHumiditySensor",
     "dung/MQTT/LightSensor"};
 
@@ -41,7 +38,7 @@ void TemperatureHumiditySensor(void *pvParameters);
 void TaskLightSensor(void *pvParameters);
 
 // control device
-void lebSwitching(void *pvParameters);
+void ledSwitching(void *pvParameters);
 void screenShowing(void *pvParameters);
 
 // Define your components here
@@ -53,11 +50,10 @@ MQTTClient mqtt = MQTTClient(256);
 
 void setup()
 {
-
   Serial.begin(115200);
   Serial.println("Setup started");
 
-  pinMode(D13, OUTPUT);
+  pinMode(13, OUTPUT);
 
   DHT.begin();
   lcd.init();
@@ -77,14 +73,15 @@ void setup()
 
   connectToMQTT();
 
-  xTaskCreate(TemperatureHumiditySensor, "Task read DH20 sensor (temperature and huminity).", 4096, NULL, 1, NULL); // Increased stack size
-  xTaskCreate(TaskLightSensor, "Task read light sensor.", 4096, NULL, 1, NULL);                                     // Increased stack size
+  xTaskCreate(TemperatureHumiditySensor, "Task read DHT20 sensor (temperature and humidity).", 4096, NULL, 1, NULL); // Increased stack size
+  xTaskCreate(TaskLightSensor, "Task read light sensor.", 4096, NULL, 1, NULL);                                      // Increased stack size
 
   Serial.println("Setup completed");
 }
 
 void loop()
 {
+  mqtt.loop();
 }
 
 void TemperatureHumiditySensor(void *pvParameters)
@@ -119,11 +116,12 @@ void TaskLightSensor(void *pvParameters)
 
     Serial.println("Task read light-sensor.");
 
-    Serial.println(analogRead(A0));
+    int lightIntensity = analogRead(A0);
+    Serial.println(lightIntensity);
 
     StaticJsonDocument<200> message;
     message["timestamp"] = millis();
-    message["lightIntensity"] = analogRead(A0);
+    message["lightIntensity"] = lightIntensity;
     char messageBuffer[512];
     serializeJson(message, messageBuffer);
 
@@ -170,7 +168,6 @@ void connectToMQTT()
 
 void messageHandler(String &topic, String &payload)
 {
-
   // Parse the payload
   StaticJsonDocument<200> doc;
   DeserializationError error = deserializeJson(doc, payload);
@@ -182,55 +179,50 @@ void messageHandler(String &topic, String &payload)
     return;
   }
 
-  switch (topic)
-  {
-  case "dung/MQTT/LightSensor":
+  if (topic == "dung/MQTT/LightSensor")
   {
     int lightIntensity = doc["lightIntensity"];
-    // lebSwitching(void *(&lightIntensity));
-    xTaskCreate(lebSwitching, "turn leb.", 4096, (void *(&lightIntensity), 2, NULL);
-    
-    break;
+    xTaskCreate(ledSwitching, "turn led.", 4096, (void *)(&lightIntensity), 2, NULL);
   }
-  case "dung/MQTT/TemperatureHumiditySensor":
+  else if (topic == "dung/MQTT/TemperatureHumiditySensor")
   {
     ScreenData screenData;
     char line0[17];
-    snprintf(str, 17, "%d", int(doc["Temperature"]));
+    snprintf(line0, 17, "Temp: %d", int(doc["Temperature"]));
     char line1[17];
-    snprintf(str, 17, "%d", int(doc["humidity"]));
-    screenData.line0 = &line0;
-    screenData.line1 = &line1;
-    // screenShowing(void *(&screenData));
-    xTaskCreate(screenShowing, "showing data in screen.", 4096, (void *(&screenData), 2, NULL);
-    break;
+    snprintf(line1, 17, "Humidity: %d", int(doc["humidity"]));
+    screenData.line0 = line0;
+    screenData.line1 = line1;
+    xTaskCreate(screenShowing, "showing data on screen.", 4096, (void *)(&screenData), 2, NULL);
   }
-  default:
+  else
   {
     Serial.print("Do not handle for topic: ");
-    Serial.print(topic);
-  }
+    Serial.println(topic);
   }
 }
 
-void lebSwitching(void *pvParameters)
+void ledSwitching(void *pvParameters)
 {
-  if (*((int *)pvParameters) > 500)
+  int lightIntensity = *((int *)pvParameters);
+  if (lightIntensity > 500)
   {
-    digitalWrite(D13, HIGH);
+    digitalWrite(13, HIGH);
   }
-  else if (data < 250)
+  else if (lightIntensity < 250)
   {
-    digitalWrite(D13, LOW);
+    digitalWrite(13, LOW);
   }
+  vTaskDelete(NULL); // delete this task when done
 }
 
 void screenShowing(void *pvParameters)
 {
-  ScreenData* data = (ScreenData*)pvParameters;
+  ScreenData *data = (ScreenData *)pvParameters;
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print(*((*data)[0]));
+  lcd.print(data->line0);
   lcd.setCursor(0, 1);
-  lcd.print(*((*data)[1]));
+  lcd.print(data->line1);
+  vTaskDelete(NULL); // delete this task when done
 }
