@@ -33,11 +33,11 @@ struct ScreenData
 
 // Define your tasks here
 
-// read sensor
+// Your includes and global variable declarations remain the same
+
+// Define your tasks here
 void TemperatureHumiditySensor(void *pvParameters);
 void TaskLightSensor(void *pvParameters);
-
-// control device
 void ledSwitching(void *pvParameters);
 void screenShowing(void *pvParameters);
 
@@ -53,7 +53,7 @@ void setup()
   Serial.begin(115200);
   Serial.println("Setup started");
 
-  pinMode(13, OUTPUT);
+  pinMode(LED_BUILTIN, OUTPUT);
 
   DHT.begin();
   lcd.init();
@@ -79,6 +79,7 @@ void setup()
   Serial.println("Setup completed");
 }
 
+// Loop function remains the same
 void loop()
 {
   mqtt.loop();
@@ -89,7 +90,6 @@ void TemperatureHumiditySensor(void *pvParameters)
   while (1)
   {
     mqtt.loop();
-
     Serial.println("Task read Temperature&Humidity-sensor.");
 
     DHT.read();
@@ -113,15 +113,12 @@ void TaskLightSensor(void *pvParameters)
   while (1)
   {
     mqtt.loop();
-
     Serial.println("Task read light-sensor.");
-
-    int lightIntensity = analogRead(A0);
-    Serial.println(lightIntensity);
 
     StaticJsonDocument<200> message;
     message["timestamp"] = millis();
-    message["lightIntensity"] = lightIntensity;
+    message["lightIntensity"] = int(analogRead(A0));
+    
     char messageBuffer[512];
     serializeJson(message, messageBuffer);
 
@@ -134,7 +131,6 @@ void TaskLightSensor(void *pvParameters)
 void connectToMQTT()
 {
   mqtt.begin(MQTT_BROKER_ADDRESS, MQTT_PORT, network);
-
   mqtt.onMessage(messageHandler);
 
   Serial.print("ESP32 - Connecting to MQTT broker");
@@ -186,14 +182,14 @@ void messageHandler(String &topic, String &payload)
   }
   else if (topic == "dung/MQTT/TemperatureHumiditySensor")
   {
-    ScreenData screenData;
-    char line0[17];
-    snprintf(line0, 17, "Temp: %d", int(doc["Temperature"]));
-    char line1[17];
-    snprintf(line1, 17, "Humidity: %d", int(doc["humidity"]));
-    screenData.line0 = line0;
-    screenData.line1 = line1;
-    xTaskCreate(screenShowing, "showing data on screen.", 4096, (void *)(&screenData), 2, NULL);
+    // Allocate memory for ScreenData
+    ScreenData *screenData = new ScreenData;
+    screenData->line0 = new char[17];
+    snprintf(screenData->line0, 17, "Temp: %d", int(doc["Temperature"]));
+    screenData->line1 = new char[17];
+    snprintf(screenData->line1, 17, "Humi: %d", int(doc["humidity"]));
+    
+    xTaskCreate(screenShowing, "showing data on screen.", 4096, (void *)(screenData), 2, NULL);
   }
   else
   {
@@ -202,16 +198,18 @@ void messageHandler(String &topic, String &payload)
   }
 }
 
+
 void ledSwitching(void *pvParameters)
 {
   int lightIntensity = *((int *)pvParameters);
+
   if (lightIntensity > 500)
   {
-    digitalWrite(13, HIGH);
+    digitalWrite(LED_BUILTIN, HIGH);
   }
   else if (lightIntensity < 250)
   {
-    digitalWrite(13, LOW);
+    digitalWrite(LED_BUILTIN, LOW);
   }
   vTaskDelete(NULL); // delete this task when done
 }
@@ -224,5 +222,13 @@ void screenShowing(void *pvParameters)
   lcd.print(data->line0);
   lcd.setCursor(0, 1);
   lcd.print(data->line1);
+
+  // Free allocated memory
+  delete[] data->line0;
+  delete[] data->line1;
+  delete data;
+
   vTaskDelete(NULL); // delete this task when done
 }
+
+
